@@ -1,0 +1,35 @@
+name: Clean notebook widgets
+
+on:
+  push:
+    paths: ['**.ipynb']
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'   # evita el bucle
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Strip widget metadata
+        run: |
+          python - <<'EOF'
+          import json, glob
+          for p in glob.glob('**/*.ipynb', recursive=True):
+              nb = json.load(open(p, encoding='utf-8'))
+              changed = nb.get('metadata', {}).pop('widgets', None) is not None
+              for c in nb.get('cells', []):
+                  if c.get('metadata', {}).pop('widgets', None) is not None:
+                      changed = True
+              if changed:
+                  json.dump(nb, open(p, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
+                  print('limpiado', p)
+          EOF
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --staged --quiet || git commit -m 'chore: strip widget metadata [skip ci]'
+          git push
